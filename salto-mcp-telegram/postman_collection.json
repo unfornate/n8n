@@ -23,13 +23,24 @@
       "name": "SSE handshake",
       "request": {
         "method": "GET",
-        "header": [],
+        "header": [
+          {
+            "key": "Accept",
+            "value": "text/event-stream"
+          }
+        ],
         "url": {
-          "raw": "http://{{baseHost}}:{{basePort}}/sse",
+          "raw": "http://{{baseHost}}:{{basePort}}/sse?sessionId={{clientSessionId}}",
           "protocol": "http",
           "host": ["{{baseHost}}"],
           "port": "{{basePort}}",
-          "path": ["sse"]
+          "path": ["sse"],
+          "query": [
+            {
+              "key": "sessionId",
+              "value": "{{clientSessionId}}"
+            }
+          ]
         }
       }
     },
@@ -62,6 +73,34 @@
         }
       },
       "response": []
+    },
+    {
+      "name": "Diagnostics: tools",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://{{baseHost}}:{{basePort}}/tools",
+          "protocol": "http",
+          "host": ["{{baseHost}}"],
+          "port": "{{basePort}}",
+          "path": ["tools"]
+        }
+      }
+    },
+    {
+      "name": "Diagnostics: sessions",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://{{baseHost}}:{{basePort}}/sessions",
+          "protocol": "http",
+          "host": ["{{baseHost}}"],
+          "port": "{{basePort}}",
+          "path": ["sessions"]
+        }
+      }
     }
   ],
   "variable": [
@@ -76,6 +115,10 @@
     {
       "key": "sessionId",
       "value": "REPLACE_WITH_SESSION"
+    },
+    {
+      "key": "clientSessionId",
+      "value": "cli-1"
     }
   ]
 }

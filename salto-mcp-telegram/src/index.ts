@@ -6,7 +6,7 @@ import { logger } from "./utils/logger.js";
 import { registerHealthEndpoint } from "./http/health.js";
 import { registerSseTransport } from "./http/sse.js";
 import { mcpServer } from "./mcp/server.js";
-import { normalizeError } from "./utils/errors.js";
+import { toErrorResponse } from "./utils/errors.js";
 
 const app = express();
 const startedAt = Date.now();
@@ -31,26 +31,25 @@ registerSseTransport(app, mcpServer);
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   void _next;
-  const normalized = normalizeError(err);
-  logger.error({ err, status: normalized.statusCode }, "Unhandled error");
-  res.status(normalized.statusCode).json({
-    ok: false,
-    message: normalized.message
+  const normalized = toErrorResponse(err);
+  logger.error({ err, status: normalized.status, code: normalized.code }, "Unhandled error");
+  res.status(normalized.status).json(normalized);
+});
+
+let server: import("node:http").Server | undefined;
+
+if (env.nodeEnv !== "test") {
+  server = app.listen(env.port, () => {
+    logger.info({ port: env.port }, "Salto Telegram MCP server started");
   });
-});
 
-const server = app.listen(env.port, () => {
-  logger.info({ port: env.port }, "Salto Telegram MCP server started");
-});
+  const shutdown = (signal: string) => {
+    logger.info({ signal }, "Received signal, shutting down");
+    server?.close(() => process.exit(0));
+  };
 
-process.on("SIGTERM", () => {
-  logger.info("Received SIGTERM, shutting down");
-  server.close(() => process.exit(0));
-});
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+}
 
-process.on("SIGINT", () => {
-  logger.info("Received SIGINT, shutting down");
-  server.close(() => process.exit(0));
-});
-
-export { app };
+export { app, server };

@@ -3,7 +3,7 @@ import FormData from "form-data";
 import sanitizeHtml from "sanitize-html";
 import type { Logger } from "pino";
 import { env } from "../utils/env.js";
-import { AppError } from "../utils/errors.js";
+import { AppError, ErrorCodes } from "../utils/errors.js";
 import { RateLimiter } from "../utils/rateLimit.js";
 import { logger as baseLogger } from "../utils/logger.js";
 import { resolveFileInput } from "./files.js";
@@ -53,6 +53,14 @@ interface TelegramResponse<T> {
   result?: T;
   description?: string;
   error_code?: number;
+}
+
+type TelegramOperation = "sendMessage" | "sendDocument" | "getUpdates" | "getChat";
+
+interface RequestMeta {
+  operation: TelegramOperation;
+  originalChatId?: string;
+  resolvedChatId?: string | number;
 }
 
 export interface SendMessagePayload {
@@ -152,7 +160,12 @@ export class TelegramService {
         data: requestPayload
       },
       context,
-      log
+      log,
+      {
+        operation: "sendMessage",
+        originalChatId: payload.chat_id,
+        resolvedChatId: chatId
+      }
     );
 
     log.info({ chatId, messageId: response.message_id }, "Message delivered to Telegram");
@@ -191,7 +204,12 @@ export class TelegramService {
         headers: form.getHeaders()
       },
       context,
-      log
+      log,
+      {
+        operation: "sendDocument",
+        originalChatId: payload.chat_id,
+        resolvedChatId: chatId
+      }
     );
 
     log.info({ chatId, messageId: response.message_id }, "Document sent via Telegram");
@@ -212,7 +230,10 @@ export class TelegramService {
         }
       },
       context,
-      log
+      log,
+      {
+        operation: "getUpdates"
+      }
     );
 
     log.debug({ updateCount: Array.isArray(response) ? response.length : 0 }, "Fetched updates");
@@ -247,7 +268,11 @@ export class TelegramService {
         data: { chat_id: chatIdOrUsername }
       },
       context,
-      log
+      log,
+      {
+        operation: "getChat",
+        originalChatId: chatIdOrUsername
+      }
     );
 
     this.ensureChatAccess(response.id);
@@ -292,7 +317,11 @@ export class TelegramService {
 
     const normalized = String(chatId);
     if (!this.config.allowedChatIds.has(normalized)) {
-      throw new AppError(403, `Chat ${normalized} is not allowed`);
+      throw new AppError(
+        403,
+        ErrorCodes.TELEGRAM_CHAT_NOT_ALLOWED,
+        `Chat ${normalized} is not allowed by configuration`
+      );
     }
   }
 
@@ -300,6 +329,7 @@ export class TelegramService {
     config: AxiosRequestConfig,
     context: ServiceContext,
     log: Logger,
+    meta: RequestMeta,
     attempt = 0
   ): Promise<T> {
     await this.rateLimiter.acquire();
@@ -308,6 +338,7 @@ export class TelegramService {
       if (!response.data?.ok || !response.data.result) {
         throw new AppError(
           502,
+          ErrorCodes.TELEGRAM_API_ERROR,
           response.data?.description || "Unexpected response from Telegram"
         );
       }
@@ -321,15 +352,77 @@ export class TelegramService {
         const delayMs = 2 ** attempt * 300;
         log.warn({ attempt, delayMs }, "Retrying Telegram request after transient error");
         await new Promise((resolve) => setTimeout(resolve, delayMs));
-        return this.makeRequest<T>(config, context, log, attempt + 1);
+        return this.makeRequest<T>(config, context, log, meta, attempt + 1);
       }
 
       const description = axiosError.response?.data?.description || axiosError.message;
       const errorCode = axiosError.response?.data?.error_code;
 
       log.error({ status, errorCode, description }, "Telegram API request failed");
-      throw new AppError(status, description ?? "Telegram API request failed");
+      throw this.createTelegramError(status, description, meta, axiosError);
     }
+  }
+
+  private createTelegramError(
+    status: number,
+    description: string | undefined,
+    meta: RequestMeta,
+    error: AxiosError
+  ): AppError {
+    const message = description || "Telegram API request failed";
+    const lowered = message.toLowerCase();
+    const details = {
+      telegramStatus: status,
+      telegramMessage: description,
+      operation: meta.operation,
+      originalChatId: meta.originalChatId,
+      resolvedChatId: meta.resolvedChatId
+    };
+
+    if (
+      meta.operation === "getChat" &&
+      status === 400 &&
+      meta.originalChatId?.startsWith("@") &&
+      lowered.includes("chat not found")
+    ) {
+      const hint =
+        "Bad Request: chat not found. Проверь: " +
+        "1) пользователь написал боту хотя бы 1 раз (для @username), " +
+        "2) для группы/канала — бот добавлен в участники, " +
+        "3) у бота есть право писать в чат. Альтернатива: используй числовой chat_id.";
+      return new AppError(400, ErrorCodes.TELEGRAM_CHAT_NOT_FOUND, hint, details);
+    }
+
+    if (lowered.includes("bot was blocked by the user") || lowered.includes("can't initiate conversation")) {
+      const handle = env.telegramBotUsername
+        ? env.telegramBotUsername.startsWith("@")
+          ? env.telegramBotUsername
+          : `@${env.telegramBotUsername}`
+        : "ботом";
+      const hint = `${message}. Открой диалог с ${handle} и нажми Start.`;
+      return new AppError(403, ErrorCodes.TELEGRAM_FORBIDDEN, hint, details);
+    }
+
+    if (status === 403) {
+      return new AppError(403, ErrorCodes.TELEGRAM_FORBIDDEN, message, details);
+    }
+
+    if (status === 400) {
+      return new AppError(400, ErrorCodes.TELEGRAM_BAD_REQUEST, message, details);
+    }
+
+    if (status === 429) {
+      return new AppError(429, ErrorCodes.TELEGRAM_API_ERROR, `${message} (rate limited)`, details);
+    }
+
+    if (status >= 500) {
+      return new AppError(status, ErrorCodes.TELEGRAM_API_ERROR, `${message} (telegram error)`, details);
+    }
+
+    return new AppError(status || 502, ErrorCodes.TELEGRAM_MESSAGE_NOT_DELIVERED, message, {
+      ...details,
+      originalError: error.toJSON?.() ?? error.message
+    });
   }
 
   private shouldRetry(error: AxiosError): boolean {

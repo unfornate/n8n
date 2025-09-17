@@ -4,13 +4,27 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { getChatSchema, getUpdatesSchema, sendDocumentSchema, sendMessageSchema } from "./schemas.js";
 import { telegramService } from "../services/telegram.js";
 import { createRequestLogger, logger } from "../utils/logger.js";
-import { normalizeError } from "../utils/errors.js";
+import { toErrorResponse } from "../utils/errors.js";
 import { env } from "../utils/env.js";
 
 export const mcpServer = new McpServer({
   name: "salto-telegram-mcp",
   version: env.version
 });
+
+interface RegisteredToolInfo {
+  name: string;
+  title?: string;
+  description?: string;
+}
+
+const registeredTools: RegisteredToolInfo[] = [];
+
+const recordTool = (name: string, definition: { title?: string; description?: string }) => {
+  registeredTools.push({ name, title: definition.title, description: definition.description });
+};
+
+export const getRegisteredTools = () => registeredTools.map((tool) => ({ ...tool }));
 
 const toTextContent = (payload: unknown) => ({
   type: "text" as const,
@@ -21,18 +35,22 @@ const successResult = (payload: unknown): CallToolResult => ({
   content: [toTextContent(payload)]
 });
 
-const errorResult = (status: number, message: string): CallToolResult => ({
+const errorResult = (error: ReturnType<typeof toErrorResponse>): CallToolResult => ({
   isError: true,
-  content: [toTextContent({ ok: false, status, message })]
+  content: [toTextContent(error)]
 });
+
+const sendMessageDefinition = {
+  title: "Send Telegram message",
+  description: "Отправить текстовое сообщение пользователю/группе/каналу",
+  inputSchema: sendMessageSchema.shape
+};
+
+recordTool("telegram.send_message", sendMessageDefinition);
 
 mcpServer.registerTool(
   "telegram.send_message",
-  {
-    title: "Send Telegram message",
-    description: "Отправить текстовое сообщение пользователю/группе/каналу",
-    inputSchema: sendMessageSchema.shape
-  },
+  sendMessageDefinition,
   async (input) => {
     const parsed = sendMessageSchema.parse(input ?? {});
     const requestId = randomUUID();
@@ -47,20 +65,24 @@ mcpServer.registerTool(
         chat: response.chat
       });
     } catch (error) {
-      const normalized = normalizeError(error);
-      childLogger.error({ err: error, status: normalized.statusCode }, "send_message failed");
-      return errorResult(normalized.statusCode, normalized.message);
+      const normalized = toErrorResponse(error);
+      childLogger.error({ err: error, status: normalized.status, code: normalized.code }, "send_message failed");
+      return errorResult(normalized);
     }
   }
 );
 
+const sendDocumentDefinition = {
+  title: "Send Telegram document",
+  description: "Отправить документ в Telegram чат",
+  inputSchema: sendDocumentSchema.shape
+};
+
+recordTool("telegram.send_document", sendDocumentDefinition);
+
 mcpServer.registerTool(
   "telegram.send_document",
-  {
-    title: "Send Telegram document",
-    description: "Отправить документ в Telegram чат",
-    inputSchema: sendDocumentSchema.shape
-  },
+  sendDocumentDefinition,
   async (input) => {
     const parsed = sendDocumentSchema.parse(input ?? {});
     const requestId = randomUUID();
@@ -74,20 +96,24 @@ mcpServer.registerTool(
         document: response.document
       });
     } catch (error) {
-      const normalized = normalizeError(error);
-      childLogger.error({ err: error, status: normalized.statusCode }, "send_document failed");
-      return errorResult(normalized.statusCode, normalized.message);
+      const normalized = toErrorResponse(error);
+      childLogger.error({ err: error, status: normalized.status, code: normalized.code }, "send_document failed");
+      return errorResult(normalized);
     }
   }
 );
 
+const getUpdatesDefinition = {
+  title: "Fetch Telegram updates",
+  description: "Получить последние апдейты бота через getUpdates",
+  inputSchema: getUpdatesSchema.shape
+};
+
+recordTool("telegram.get_updates", getUpdatesDefinition);
+
 mcpServer.registerTool(
   "telegram.get_updates",
-  {
-    title: "Fetch Telegram updates",
-    description: "Получить последние апдейты бота через getUpdates",
-    inputSchema: getUpdatesSchema.shape
-  },
+  getUpdatesDefinition,
   async (input) => {
     const parsed = getUpdatesSchema.parse(input ?? {});
     const requestId = randomUUID();
@@ -97,20 +123,24 @@ mcpServer.registerTool(
       const updates = await telegramService.getUpdates(parsed, { requestId, logger: childLogger });
       return successResult({ ok: true, updates });
     } catch (error) {
-      const normalized = normalizeError(error);
-      childLogger.error({ err: error, status: normalized.statusCode }, "get_updates failed");
-      return errorResult(normalized.statusCode, normalized.message);
+      const normalized = toErrorResponse(error);
+      childLogger.error({ err: error, status: normalized.status, code: normalized.code }, "get_updates failed");
+      return errorResult(normalized);
     }
   }
 );
 
+const getChatDefinition = {
+  title: "Resolve Telegram chat",
+  description: "Получить информацию о чате для разрешения username → chat_id",
+  inputSchema: getChatSchema.shape
+};
+
+recordTool("telegram.get_chat", getChatDefinition);
+
 mcpServer.registerTool(
   "telegram.get_chat",
-  {
-    title: "Resolve Telegram chat",
-    description: "Получить информацию о чате для разрешения username → chat_id",
-    inputSchema: getChatSchema.shape
-  },
+  getChatDefinition,
   async (input) => {
     const parsed = getChatSchema.parse(input ?? {});
     const requestId = randomUUID();
@@ -123,19 +153,23 @@ mcpServer.registerTool(
       });
       return successResult({ ok: true, chat });
     } catch (error) {
-      const normalized = normalizeError(error);
-      childLogger.error({ err: error, status: normalized.statusCode }, "get_chat failed");
-      return errorResult(normalized.statusCode, normalized.message);
+      const normalized = toErrorResponse(error);
+      childLogger.error({ err: error, status: normalized.status, code: normalized.code }, "get_chat failed");
+      return errorResult(normalized);
     }
   }
 );
 
+const systemHealthDefinition = {
+  title: "Health check",
+  description: "Проверка живости MCP сервера"
+};
+
+recordTool("system.health", systemHealthDefinition);
+
 mcpServer.registerTool(
   "system.health",
-  {
-    title: "Health check",
-    description: "Проверка живости MCP сервера",
-  },
+  systemHealthDefinition,
   async () =>
     successResult({
       ok: true,

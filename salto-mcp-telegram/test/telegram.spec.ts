@@ -3,12 +3,14 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 let TelegramServiceClass: typeof import("../src/services/telegram.js").TelegramService;
 let AppErrorClass: typeof import("../src/utils/errors.js").AppError;
+let ErrorCodes: typeof import("../src/utils/errors.js").ErrorCodes;
 
 beforeAll(async () => {
   const serviceModule = await import("../src/services/telegram.js");
   TelegramServiceClass = serviceModule.TelegramService;
   const errorModule = await import("../src/utils/errors.js");
   AppErrorClass = errorModule.AppError;
+  ErrorCodes = errorModule.ErrorCodes;
 });
 
 const createService = (allowedChatIds: string[] = []) =>
@@ -92,5 +94,23 @@ describe("Telegram service", () => {
     await expect(
       service.sendMessage({ chat_id: "2", text: "Nope" }, { requestId: "denied" })
     ).rejects.toBeInstanceOf(AppErrorClass);
+  });
+
+  it("returns actionable hint when username chat is not found", async () => {
+    const service = createService();
+
+    const scope = nock("https://api.telegram.org")
+      .post("/botTEST_TOKEN/getChat")
+      .reply(400, {
+        ok: false,
+        description: "Bad Request: chat not found"
+      });
+
+    await expect(service.getChat("@missing", { requestId: "hint" })).rejects.toMatchObject({
+      statusCode: 400,
+      code: ErrorCodes.TELEGRAM_CHAT_NOT_FOUND
+    });
+
+    scope.done();
   });
 });

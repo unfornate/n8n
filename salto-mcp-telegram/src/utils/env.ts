@@ -13,8 +13,12 @@ const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: z
     .string()
     .min(1, "TELEGRAM_BOT_TOKEN is required"),
+  TELEGRAM_BOT_USERNAME: z.string().optional(),
   ALLOWED_CHAT_IDS: z.string().optional(),
   AUTH_BEARER: z.string().optional(),
+  ALLOW_LEGACY_BODY: z
+    .enum(["true", "false"])
+    .optional(),
   LOG_LEVEL: z.string().optional()
 });
 
@@ -36,10 +40,12 @@ export interface EnvConfig {
   nodeEnv: "development" | "test" | "production";
   port: number;
   telegramBotToken: string;
+  telegramBotUsername?: string;
   allowedChatIds: Set<string>;
   authBearer?: string;
   logLevel: string;
   version: string;
+  allowLegacyBody: boolean;
   telegram: {
     timeoutMs: number;
     maxRetries: number;
@@ -52,10 +58,15 @@ export const env: EnvConfig = {
   nodeEnv: data.NODE_ENV,
   port: data.PORT,
   telegramBotToken: data.TELEGRAM_BOT_TOKEN,
+  telegramBotUsername: data.TELEGRAM_BOT_USERNAME,
   allowedChatIds: new Set(allowedChatIds),
   authBearer: data.AUTH_BEARER,
   logLevel: data.LOG_LEVEL || (data.NODE_ENV === "development" ? "debug" : "info"),
   version: pkg.version,
+  allowLegacyBody:
+    data.ALLOW_LEGACY_BODY !== undefined
+      ? data.ALLOW_LEGACY_BODY === "true"
+      : data.NODE_ENV !== "production",
   telegram: {
     timeoutMs: 15_000,
     maxRetries: 2,
