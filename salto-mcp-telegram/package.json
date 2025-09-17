@@ -1,0 +1,44 @@
+{
+  "name": "salto-mcp-telegram",
+  "version": "0.1.0",
+  "description": "MCP server bridging ChatGPT with Telegram Bot API",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "axios": "^1.7.4",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "form-data": "^4.0.0",
+    "pino": "^9.3.2",
+    "sanitize-html": "^2.13.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/form-data": "^2.5.0",
+    "@types/node": "^20.14.11",
+    "@types/sanitize-html": "^2.13.0",
+    "@typescript-eslint/eslint-plugin": "^7.16.0",
+    "@typescript-eslint/parser": "^7.16.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "nock": "^13.5.5",
+    "prettier": "^3.3.3",
+    "tsx": "^4.17.0",
+    "typescript": "^5.5.4",
+    "vitest": "^1.6.0"
+  }
+}
