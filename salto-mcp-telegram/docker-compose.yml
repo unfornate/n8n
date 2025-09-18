@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  mcp:
+    build: .
+    env_file:
+      - .env
+    ports:
+      - "8787:8787"
+    restart: unless-stopped
+  ngrok:
+    image: ngrok/ngrok:latest
+    command: http mcp:8787
+    depends_on:
+      - mcp
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    ports:
+      - "4040:4040"
