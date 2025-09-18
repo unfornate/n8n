@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 import { getChatSchema, getUpdatesSchema, sendDocumentSchema, sendMessageSchema } from "./schemas.js";
 import { telegramService } from "../services/telegram.js";
 import { createRequestLogger, logger } from "../utils/logger.js";
@@ -25,6 +26,72 @@ const recordTool = (name: string, definition: { title?: string; description?: st
 };
 
 export const getRegisteredTools = () => registeredTools.map((tool) => ({ ...tool }));
+
+const searchToolSchema = z.object({
+  query: z.string().trim().optional(),
+  limit: z.number().int().min(1).max(50).default(10)
+});
+
+const fetchToolSchema = z.object({
+  name: z.string().min(1)
+});
+
+const searchDefinition = {
+  title: "Search registered tools",
+  description: "Найти зарегистрированные инструменты по имени или описанию",
+  inputSchema: searchToolSchema.shape
+};
+
+recordTool("search", searchDefinition);
+
+mcpServer.registerTool(
+  "search",
+  searchDefinition,
+  async (input) => {
+    const parsed = searchToolSchema.parse(input ?? {});
+    const query = parsed.query?.toLowerCase();
+    const tools = getRegisteredTools()
+      .filter((tool) => {
+        if (!query) {
+          return true;
+        }
+
+        const haystack = [tool.name, tool.title ?? "", tool.description ?? ""].join(" ").toLowerCase();
+        return haystack.includes(query);
+      })
+      .slice(0, parsed.limit);
+
+    return successResult({ ok: true, tools });
+  }
+);
+
+const fetchDefinition = {
+  title: "Fetch registered tool",
+  description: "Получить информацию о зарегистрированном инструменте по имени",
+  inputSchema: fetchToolSchema.shape
+};
+
+recordTool("fetch", fetchDefinition);
+
+mcpServer.registerTool(
+  "fetch",
+  fetchDefinition,
+  async (input) => {
+    const parsed = fetchToolSchema.parse(input ?? {});
+    const tool = getRegisteredTools().find((candidate) => candidate.name === parsed.name);
+
+    if (!tool) {
+      return errorResult({
+        ok: false,
+        status: 404,
+        code: "TOOL_NOT_FOUND",
+        message: `Tool "${parsed.name}" not found`
+      });
+    }
+
+    return successResult({ ok: true, tool });
+  }
+);
 
 const toTextContent = (payload: unknown) => ({
   type: "text" as const,
