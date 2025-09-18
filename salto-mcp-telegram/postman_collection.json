@@ -1,0 +1,124 @@
+{
+  "info": {
+    "name": "Salto Telegram MCP",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Коллекция для проверки MCP сервера и вспомогательных HTTP эндпоинтов"
+  },
+  "item": [
+    {
+      "name": "Healthz",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://{{baseHost}}:{{basePort}}/healthz",
+          "protocol": "http",
+          "host": ["{{baseHost}}"],
+          "port": "{{basePort}}",
+          "path": ["healthz"]
+        }
+      }
+    },
+    {
+      "name": "SSE handshake",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "text/event-stream"
+          }
+        ],
+        "url": {
+          "raw": "http://{{baseHost}}:{{basePort}}/sse?sessionId={{clientSessionId}}",
+          "protocol": "http",
+          "host": ["{{baseHost}}"],
+          "port": "{{basePort}}",
+          "path": ["sse"],
+          "query": [
+            {
+              "key": "sessionId",
+              "value": "{{clientSessionId}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Send message (MCP)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"1\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"telegram.send_message\",\n    \"arguments\": {\n      \"chat_id\": \"123\",\n      \"text\": \"Привет от MCP\"\n    }\n  }\n}"
+        },
+        "url": {
+          "raw": "http://{{baseHost}}:{{basePort}}/messages?sessionId={{sessionId}}",
+          "protocol": "http",
+          "host": ["{{baseHost}}"],
+          "port": "{{basePort}}",
+          "path": ["messages"],
+          "query": [
+            {
+              "key": "sessionId",
+              "value": "{{sessionId}}"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Diagnostics: tools",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://{{baseHost}}:{{basePort}}/tools",
+          "protocol": "http",
+          "host": ["{{baseHost}}"],
+          "port": "{{basePort}}",
+          "path": ["tools"]
+        }
+      }
+    },
+    {
+      "name": "Diagnostics: sessions",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://{{baseHost}}:{{basePort}}/sessions",
+          "protocol": "http",
+          "host": ["{{baseHost}}"],
+          "port": "{{basePort}}",
+          "path": ["sessions"]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseHost",
+      "value": "localhost"
+    },
+    {
+      "key": "basePort",
+      "value": "8787"
+    },
+    {
+      "key": "sessionId",
+      "value": "REPLACE_WITH_SESSION"
+    },
+    {
+      "key": "clientSessionId",
+      "value": "cli-1"
+    }
+  ]
+}

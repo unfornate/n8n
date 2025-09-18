@@ -1,0 +1,38 @@
+name: Salto Telegram MCP CI
+
+on:
+  push:
+    paths:
+      - 'salto-mcp-telegram/**'
+  pull_request:
+    paths:
+      - 'salto-mcp-telegram/**'
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: salto-mcp-telegram
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: salto-mcp-telegram/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
